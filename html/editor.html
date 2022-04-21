@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<script src="https://sapling.ai/static/js/sapling-sdk-v1.0.1.min.js"></script>
+
+</head>
+<body>
+
+  <h1>Sapling SDK Demo</h1>
+
+  <div contenteditable="true" id="check-space" sapling-ignore="true">Lets get started!</div>
+
+</body>
+
+<script type="text/javascript">
+Sapling.init({
+  key: '<API_KEY>',
+  endpointHostname: 'https://api.sapling.ai',
+  editPathname: '/api/v1/edits',
+  statusBadge: true,
+  mode: 'dev',
+});
+
+const contentEditable = document.getElementById('check-space');
+Sapling.observe(contentEditable);
+</script>
+
+</html>

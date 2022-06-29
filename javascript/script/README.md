@@ -9,7 +9,7 @@
 
 ## Running
 
-Run `node test.js`
+Run `node get_edits.mjs`
 
 The result should be an array of edits of this form:
 

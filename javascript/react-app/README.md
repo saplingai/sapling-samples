@@ -1,5 +1,9 @@
 # Sapling SDK: Example React App
 
+This app is an example of integrating Sapling into an Angular or Typescript application.
+Sapling is declared in `package.json` installed as a dependancy through npm.
+
+
 ## Installation
 
 - `npm install`

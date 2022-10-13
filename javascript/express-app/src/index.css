@@ -1,0 +1,17 @@
+body {
+  margin: 0;
+  font-family: 'Helvetica Neue', sans-serif;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+#editor{
+  height: 200px;
+  width:  400px;
+  padding: 10px;
+  margin: 10px;
+  border: 1px solid;
+}

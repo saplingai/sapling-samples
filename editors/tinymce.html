@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!-- Update this to latest version of tinymce -->
+  <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+</head>
+<body>
+  <textarea>
+    Welcome to Sapling on TinyMCE!
+  </textarea>
+
+  <!-- Update this to latest version of Sapling SDK -->
+  <script src="https://sapling.ai/static/js/sapling-sdk-v1.0.2.min.js"></script>
+  <script type="text/javascript">
+  Sapling.init({
+    key: '<API_KEY>',  // Include your API key but only in development; put API key in backend for production
+    endpointHostname: 'https://api.sapling.ai',
+    editPathname: '/api/v1/edits',
+    statusBadge: true,
+    mode: 'dev',
+  });
+
+  // Callback once tinymce initialized
+  function tinymceCallback() {
+    // Iframe selector may change
+    const contentEditable = document.querySelector('#mce_0_ifr').contentWindow.document.querySelector('#tinymce');
+    Sapling.observe(contentEditable);
+  }
+  </script>
+
+  <script>
+    tinymce.init({
+      selector: 'textarea',
+      plugins: 'anchor autolink charmap codesample emoticons image link lists media searchreplace table visualblocks wordcount checklist mediaembed casechange export formatpainter pageembed linkchecker a11ychecker tinymcespellchecker permanentpen powerpaste advtable advcode editimage tinycomments tableofcontents footnotes mergetags autocorrect typography inlinecss',
+      toolbar: 'undo redo | blocks fontfamily fontsize | bold italic underline strikethrough | link image media table mergetags | addcomment showcomments | spellcheckdialog a11ycheck typography | align lineheight | checklist numlist bullist indent outdent | emoticons charmap | removeformat',
+      tinycomments_mode: 'embedded',
+      tinycomments_author: 'Author name',
+      mergetags_list: [
+        { value: 'First.Name', title: 'First Name' },
+        { value: 'Email', title: 'Email' },
+      ],
+      init_instance_callback: tinymceCallback  // Sapling initialization callback
+    });
+  </script>
+</body>
+</html>

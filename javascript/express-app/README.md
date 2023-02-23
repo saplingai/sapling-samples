@@ -15,7 +15,7 @@ Sapling is declared as an npm dependancy in `package.json` installed as a depend
 
 ## Running
 
-Run `node server.mjs`
+Run `npm run server`
 
 
 Then visit [http://localhost:3000](http://localhost:3000) to view the app in your browser.

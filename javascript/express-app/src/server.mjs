@@ -5,7 +5,7 @@ import path from 'path';
 
 const __dirname = path.resolve();
 
-const SAPLING_API_URL = 'https://api.sapling.ai/api/v1/edits';
+const SAPLING_API_URL = 'https://api.sapling.ai';
 const apiKey = '<API_KEY>';
 
 const app = express();
@@ -18,14 +18,15 @@ app.get('/', function(req, res) {
 });
 
 app.get('/main.js', function(req, res) {
-  console.log('get root');
   res.sendFile(path.join(path.resolve(), './dist/main.js'));
 });
 
-app.post('/api/v1/edits', (req, res, next) => {
+app.post('/sapling/*', (req, res, next) => {
+  let requestPath  = req.path.substring(8);
+  let requestUrl = `${SAPLING_API_URL}${requestPath}`;
   req.body.key = apiKey;
   axios({
-    url: SAPLING_API_URL,
+    url: requestUrl,
     data: req.body,
     method: 'post',
   })

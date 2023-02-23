@@ -5,7 +5,7 @@ function App() {
   useEffect(() => {
     Sapling.init({
       endpointHostname: 'http://127.0.0.1:3000',
-      editPathname: '/api/v1/edits',
+      saplingPathPrefix: '/sapling',
       statusBadge: true,
     });
 

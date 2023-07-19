@@ -1,0 +1,232 @@
+[
+    {
+        "abbreviation": "M:PART",
+        "description": "Missing particle",
+        "example": "'Look the definition.' is missing the particle 'up' as in 'Look up the definition.'"
+    },
+    {
+        "abbreviation": "M:PUNCT",
+        "description": "Missing punctuation",
+        "example": "'Its raining' is missing an apostrophe."
+    },
+    {
+        "abbreviation": "M:CONJ",
+        "description": "Missing conjunction",
+        "example": "'I like tea coffee' is missing the conjunction 'and'."
+    },
+    {
+        "abbreviation": "M:DET",
+        "description": "Missing determiner",
+        "example": "'There are just a exceptions' is missing the determiner 'few'."
+    },
+    {
+        "abbreviation": "M:DET:ART",
+        "description": "Missing article",
+        "example": "'I saw elephant' is missing the article 'an'."
+    },
+    {
+        "abbreviation": "M:PREP",
+        "description": "Missing preposition",
+        "example": "'I went the store' is missing the preposition 'to'."
+    },
+    {
+        "abbreviation": "M:PRON",
+        "description": "Missing pronoun",
+        "example": "'She said that liked the movie.' is missing the pronoun 'she'."
+    },
+    {
+        "abbreviation": "M:VERB",
+        "description": "Missing verb",
+        "example": "'I to the park' is missing the verb 'went'."
+    },
+    {
+        "abbreviation": "M:ADJ",
+        "description": "Missing adjective",
+        "example": "'It is a brand car' is missing the adjective 'new'."
+    },
+    {
+        "abbreviation": "M:NOUN",
+        "description": "Missing noun",
+        "example": "'The is on the table' is missing the noun 'book'."
+    },
+    {
+        "abbreviation": "M:NOUN:POSS",
+        "description": "Missing possessive noun",
+        "example": "'That is John car' is missing the possessive form 'John's'."
+    },
+    {
+        "abbreviation": "M:OTHER",
+        "description": "Missing other elements",
+        "example": "NA"
+    },
+    {
+        "abbreviation": "R:PART",
+        "description": "Incorrect particle",
+        "example": "'He is interested for that' should have 'for' replaced with 'in'."
+    },
+    {
+        "abbreviation": "R:PUNCT",
+        "description": "Incorrect punctuation",
+        "example": "'How are you today.' should end with a question mark instead of a period."
+    },
+    {
+        "abbreviation": "R:ORTH",
+        "description": "Incorrect orthography",
+        "example": "'I like readin' should have 'readin' spelled as 'reading'."
+    },
+    {
+        "abbreviation": "R:SPELL",
+        "description": "Incorrect spelling",
+        "example": "'I like chokolate' should have 'chokolate' spelled as 'chocolate'."
+    },
+    {
+        "abbreviation": "R:WO",
+        "description": "Incorrect word order",
+        "example": "'I the book read' should be rearranged to 'I read the book.'"
+    },
+    {
+        "abbreviation": "R:MORPH",
+        "description": "Incorrect word form",
+        "example": "'It is danger' should be 'It is dangerous'."
+    },
+    {
+        "abbreviation": "R:ADV",
+        "description": "Incorrect adverb",
+        "example": "'She plays tennis good' should have 'good' replaced with 'well'."
+    },
+    {
+        "abbreviation": "R:CONTR",
+        "description": "Incorrect contraction",
+        "example": "'I'm not have time' should have 'I'm not have' replaced with 'I don't have.'"
+    },
+    {
+        "abbreviation": "R:CONJ",
+        "description": "Incorrect conjunction",
+        "example": "'Neither sea or air' should have 'or' replaced with 'nor'."
+    },
+    {
+        "abbreviation": "R:DET",
+        "description": "Incorrect determiner",
+        "example": "'I like this shoes' should instead be 'I like these shoes.'"
+    },
+    {
+        "abbreviation": "R:DET:ART",
+        "description": "Incorrect article",
+        "example": "'I saw a elephant' should have 'a' replaced with 'an'."
+    },
+    {
+        "abbreviation": "R:PREP",
+        "description": "Incorrect preposition",
+        "example": "'I am in work' should have 'in' replaced with 'at'."
+    },
+    {
+        "abbreviation": "R:PRON",
+        "description": "Incorrect pronoun",
+        "example": "'The group told us us will be there.' should have 'us' replaced with 'they'."
+    },
+    {
+        "abbreviation": "R:VERB:FORM",
+        "description": "Incorrect verb form",
+        "example": "'He is walk to the store' should have 'walk' replaced with 'walking'."
+    },
+    {
+        "abbreviation": "R:VERB:TENSE",
+        "description": "Incorrect verb tense",
+        "example": "'I go to the park yesterday' should have 'go' replaced with 'went'."
+    },
+    {
+        "abbreviation": "R:VERB:SVA",
+        "description": "Incorrect subject-verb agreement",
+        "example": "'They likes ice cream' should have 'likes' replaced with 'like'."
+    },
+    {
+        "abbreviation": "R:ADJ:FORM",
+        "description": "Incorrect adjective form",
+        "example": "'She is much happiest than me' should have 'happiest' replaced with 'happier'."
+    },
+    {
+        "abbreviation": "R:NOUN:INFL",
+        "description": "Incorrect noun inflection",
+        "example": "'I have two childs' should have 'childs' replaced with 'children'."
+    },
+    {
+        "abbreviation": "R:NOUN:NUM",
+        "description": "Incorrect noun number",
+        "example": "'I have a cars' should have 'a cars' replaced with 'a car'."
+    },
+    {
+        "abbreviation": "R:OTHER",
+        "description": "Replacement of phrase not easily categorized into a grammatical category",
+        "example": "In 'He go store', 'go' should be replaced with 'goes to the'."
+    },
+    {
+        "abbreviation": "U:PART",
+        "description": "Unnecessary particle",
+        "example": "'She knocked out on the door.' has an unnecessary 'out'."
+    },
+    {
+        "abbreviation": "U:PUNCT",
+        "description": "Unnecessary punctuation",
+        "example": "'It's my friend's, bag' has an unnecessary comma."
+    },
+    {
+        "abbreviation": "U:ADV",
+        "description": "Unnecessary adverb",
+        "example": "'She ran fast fast' has an unnecessary 'fast'."
+    },
+    {
+        "abbreviation": "U:CONTR",
+        "description": "Unnecessary contraction",
+        "example": "'I'm am ready.' has an unnecessary contraction ''m'."
+    },
+    {
+        "abbreviation": "U:CONJ",
+        "description": "Unnecessary conjunction",
+        "example": "'I like tea and and coffee' has an unnecessary 'and'."
+    },
+    {
+        "abbreviation": "U:DET",
+        "description": "Unnecessary determiner",
+        "example": "'I saw your your cat' has an unnecessary 'your'."
+    },
+    {
+        "abbreviation": "U:DET:ART",
+        "description": "Unnecessary article",
+        "example": "'I saw the an elephant' has an unnecessary 'an'."
+    },
+    {
+        "abbreviation": "U:PREP",
+        "description": "Unnecessary preposition",
+        "example": "'I am at in home' has an unnecessary 'in'."
+    },
+    {
+        "abbreviation": "U:PRON",
+        "description": "Unnecessary pronoun",
+        "example": "'He he likes dogs' has an unnecessary 'he'."
+    },
+    {
+        "abbreviation": "U:VERB",
+        "description": "Unnecessary verb",
+        "example": "'I went go to the park yesterday' has an unnecessary 'go'."
+    },
+    {
+        "abbreviation": "U:ADJ",
+        "description": "Unnecessary adjective",
+        "example": "'She is more happier than me' has an unnecessary 'more'."
+    },
+    {
+        "abbreviation": "U:NOUN",
+        "description": "Unnecessary noun",
+        "example": "'The dog dog is on the table' has an unnecessary 'dog'."
+    },
+    {
+        "abbreviation": "U:NOUN:POSS",
+        "description": "Unnecessary possessive noun",
+        "example": "'That is John's 's car' has an unnecessary 's'."
+    },
+    {
+        "abbreviation": "U:OTHER",
+        "description": "Unnecessary text",
+        "example": "NA"
+    }
+]

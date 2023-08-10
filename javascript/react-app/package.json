@@ -4,7 +4,7 @@
   "private": true,
   "license": "Apache-2.0",
   "dependencies": {
-    "@saplingai/sapling-js": "^1.0.5",
+    "@saplingai/sapling-js": "^1.0.16",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-scripts": "5.0.1"

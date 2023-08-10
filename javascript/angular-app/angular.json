@@ -67,8 +67,31 @@
           "options": {
             "browserTarget": "angular-app:build"
           }
+        },
+        "webpack": {
+          "builder": "@angular-builders/custom-webpack:browser",
+          "options": {
+            "customWebpackConfig": {
+              "path": "./webpack.config.js"
+            }
+          },
+          "configurations": {
+            "production": {
+              "customWebpackConfig": {
+                "path": "./webpack.config.js"
+              }
+            },
+            "development": {
+              "customWebpackConfig": {
+                "path": "./webpack.config.js"
+              }
+            }
+          }
         }
       }
     }
+  },
+  "cli": {
+    "analytics": false
   }
 }

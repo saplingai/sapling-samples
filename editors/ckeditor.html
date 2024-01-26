@@ -1,0 +1,39 @@
+<html>
+  <head>
+    <script src="https://sapling.ai/static/js/sapling-sdk-v1.0.7.min.js"></script>
+  </head>
+  <body>
+    <!-- Create the editor container -->
+    <div id="editor">
+      <p>Lets get started!</p>
+      <p><br></p>
+    </div>
+
+    <!-- Include the CKEditor library -->
+    <script src="https://cdn.ckeditor.com/ckeditor5/41.0.0/classic/ckeditor.js"></script>
+
+    <!-- Initialize CKEditor and then call Sapling initialization -->
+    <script>
+      function saplingCallback() {
+          Sapling.init({
+            key: '<API_KEY>',
+            autocomplete: true,
+            mode: 'dev',  // NOTE Do not expose API key in production (see https://sapling.ai/docs/sdk/HTML/quickstart/)
+          });
+          //const contentEditable = document.querySelector('#editor iframe').contentWindow.document.querySelector('body');
+          const contentEditable = document.querySelector('.ck-editor__editable');
+          Sapling.observe(contentEditable);
+      }
+      ClassicEditor
+        .create(document.querySelector('#editor'))
+        .then(editor => {
+          // Run after editor has initialized
+          saplingCallback();
+        })
+        .catch(error => {
+          console.error(error);
+      });
+    </script>
+  </body>
+</html>
+

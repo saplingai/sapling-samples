@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script>var exports = {};</script>
+  <!-- Update this to latest version of lexical -->
+  <script src="https://cdn.jsdelivr.net/npm/lexical@0.13.1/Lexical.prod.js"></script>
+
+  <!-- Update this to latest version of Sapling SDK -->
+  <script src="https://sapling.ai/static/js/sapling-sdk-v1.0.7.min.js"></script>
+</head>
+<body>
+  <div contenteditable="true" id="editor"></div>
+
+  <script type="text/javascript">
+  const {createEditor, $getRoot, $getSelection, $createParagraphNode, $createTextNode} = exports;
+
+  Sapling.init({
+    key: '<API_KEY>',  // Include your API key but only in development; put API key in backend for production
+    statusBadge: true,
+    mode: 'dev',
+  });
+
+  const config = {
+    namespace: 'MyEditor',
+    onError: console.error
+  };
+
+  const editor = createEditor(config);
+  const editorElement = document.getElementById('editor');
+
+  editor.setRootElement(editorElement);
+
+  editor.update(() => {
+    const root = $getRoot();
+    const selection = $getSelection();
+    const paragraphNode = $createParagraphNode();
+    const textNode = $createTextNode('Lets get started with Sapling on Lexical!');
+    paragraphNode.append(textNode);
+    root.append(paragraphNode);
+  });
+
+  Sapling.observe(editorElement);
+  </script>
+</body>
+</html>

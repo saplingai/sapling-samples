@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!-- Update this to latest version of Sapling SDK -->
+  <script src="https://sapling.ai/static/js/sapling-sdk-v1.0.7.min.js"></script>
+
+</head>
+<body>
+  <div class="element"></div>
+  <script type="module">
+    import { Editor } from 'https://esm.sh/@tiptap/core'
+    import StarterKit from 'https://esm.sh/@tiptap/starter-kit'
+
+    var editorElement = document.querySelector('.element');
+    const editor = new Editor({
+      element: editorElement,
+      extensions: [
+        StarterKit,
+      ],
+      content: '<p>Lets get started!</p>',
+    })
+
+    Sapling.init({
+      key: '<API_KEY>',  // Include your API key but only in development; put API key in backend for production
+      mode: 'dev',
+    });
+
+    var contentEditable = document.querySelector('.tiptap');
+    Sapling.observe(contentEditable);
+  </script>
+</body>
+</html>

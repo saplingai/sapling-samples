@@ -1,0 +1,75 @@
+name: Codex API review fallback
+
+on:
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: codex-api-review-${{ github.repository }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    if: |
+      github.event.issue.pull_request != null &&
+      github.event.comment.body == '/codex-api-review' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout pull request merge commit
+        uses: actions/checkout@v5
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/merge
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Codex API review
+        id: codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          model: gpt-5.6-sol
+          effort: high
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          output-file: codex-review.md
+          prompt: |
+            Review PR #${{ github.event.issue.number }} as a senior engineer.
+
+            Inspect the complete pull request diff with:
+            `git diff HEAD^1...HEAD^2`
+
+            Read and follow all applicable AGENTS.md guidance. If it points to
+            CLAUDE.md, read and follow that guidance too.
+
+            Report only actionable correctness, security, reliability, or data
+            integrity problems. Prioritize P0/P1 issues, cite exact files and
+            lines, and explain the failure mode. Do not modify files. Return a
+            concise Markdown review; if there are no serious findings, say so.
+
+      - name: Require review output
+        if: steps.codex.outputs.final-message == ''
+        shell: bash
+        run: |
+          echo "Codex returned no review output." >&2
+          exit 1
+
+      - name: Post Codex review
+        uses: actions/github-script@v7
+        env:
+          CODEX_REVIEW: ${{ steps.codex.outputs.final-message }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: process.env.CODEX_REVIEW,
+              event: 'COMMENT',
+            });

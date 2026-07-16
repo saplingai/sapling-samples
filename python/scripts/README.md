@@ -1,6 +1,6 @@
-# Sapling Python 3 Example
+# Sapling Python 3 Examples
 
-This uues Sapling's [PyPI package](https://pypi.org/project/sapling-py/).
+These use Sapling's [PyPI package](https://pypi.org/project/sapling-py/).
 
 Documentation for the client is available at [Read the Docs](https://sapling.readthedocs.io/) and documentation for the HTTP API is available on [Sapling.ai](https://sapling.ai/docs).
 
@@ -13,12 +13,18 @@ python -m pip install sapling-py
 
 ## Running
 
-Replace `<YOUR_API_KEY>` with Sapling API key, then run:
+Set your API key in the `SAPLING_API_KEY` environment variable (or replace
+`<YOUR_API_KEY>` in the script), then run one of:
+
 ```
-python3 get_edits.py
+python3 get_edits.py           # Grammar and spelling edits
+python3 get_ai_detection.py    # AI-generated content detection, with chunking
+python3 analyze_text.py        # Rephrase, tone, sentiment and language detection
 ```
 
-The result should be an array of edits of this form:
+`analyze_text.py` requires `sapling-py` version 4.1.0 or later.
+
+The result of `get_edits.py` should be an array of edits of this form:
 ```
 {
   edits: [

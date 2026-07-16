@@ -5,16 +5,14 @@ import { ref, onMounted } from 'vue'
 const editorRef = ref(null);
 
 onMounted(() => {
-  console.log('onMounted');
   Sapling.init({
-    key: '<API_KEY>',
+    key: '<YOUR_API_KEY>',
     endpointHostname: 'https://api.sapling.ai',
     editPathname: '/api/v1/edits',
     statusBadge: true,
     mode: 'dev',
   });
 
-  console.log('editorRef.value:', editorRef.value);
   Sapling.observe(editorRef.value);
 })
 </script>

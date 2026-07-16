@@ -1,7 +1,7 @@
 # Sapling SDK: Example Vue App
 
-This app is an example of integrating Sapling into a Vue application.
-Sapling is declared in `package.json` installed as a dependancy through npm.
+This app is an example of integrating Sapling into a Vue application, built with [Vite](https://vite.dev/).
+Sapling is declared in `package.json` and installed as a dependency through npm.
 
 
 ## Installation
@@ -18,4 +18,4 @@ Run `npm run dev`
 
 This runs the app in the development mode.
 
-Then visit [http://http://localhost:5173/](http://http://localhost:5173/) to view the app in your browser.
+Then visit [http://localhost:5173](http://localhost:5173) to view the app in your browser.

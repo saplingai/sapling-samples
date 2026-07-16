@@ -14,7 +14,7 @@ function App() {
 
     const editor = document.getElementById('editor');
     Sapling.observe(editor);
-  });
+  }, []);
 
   return (
     <div id="editor" sapling-ignore="true" contentEditable="true">

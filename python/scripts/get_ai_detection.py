@@ -5,6 +5,10 @@ import requests
 from sapling import SaplingClient
 
 api_key = os.environ.get('SAPLING_API_KEY', '<YOUR_API_KEY>')
+if api_key == '<YOUR_API_KEY>':
+    print('Error: SAPLING_API_KEY environment variable is not set.')
+    exit(1)
+
 text = '''PASTE YOUR TEXT HERE'''
 
 # First chunk into manageable sizes.
@@ -23,7 +27,10 @@ response = requests.post(CHUNKING_ENDPOINT, json={
     'step_size': 10,  # Optional, see docs for explanation
 })
 response.raise_for_status()
-chunks = response.json()['chunks']
+chunks = response.json().get('chunks', [])
+if not chunks:
+    print('No chunks returned for analysis.')
+    exit(0)
 
 # Score each chunk with the AI detection endpoint
 client = SaplingClient(api_key=api_key)

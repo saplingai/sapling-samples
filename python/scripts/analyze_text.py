@@ -9,6 +9,11 @@ import os
 from sapling import SaplingClient
 
 api_key = os.environ.get('SAPLING_API_KEY', '<YOUR_API_KEY>')
+if api_key == '<YOUR_API_KEY>':
+    print('Error: SAPLING_API_KEY environment variable is not set.')
+    print('Please set it or replace <YOUR_API_KEY> in the script.')
+    exit(1)
+
 client = SaplingClient(api_key=api_key)
 
 text = 'hey, any updates on the contract? we should finalize by friday.'

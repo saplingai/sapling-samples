@@ -1,9 +1,9 @@
 # Sapling SDK: Example Express App
 
-This app uses Sapling into an Express application with a public facing React webpage.
+This app integrates Sapling into an Express application with a public-facing React webpage.
 Text from the public page is passed to the Express backend, which adds the API key before proxying onto Sapling servers. This way, the private Sapling API key is never exposed. The Express server may also do user authentication.
 
-Sapling is declared as an npm dependancy in `package.json` installed as a dependancy through npm.
+Sapling is declared as an npm dependency in `package.json`.
 
 
 ## Installation

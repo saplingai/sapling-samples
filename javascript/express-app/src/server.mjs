@@ -6,7 +6,7 @@ import path from 'path';
 const __dirname = path.resolve();
 
 const SAPLING_API_URL = 'https://api.sapling.ai';
-const apiKey = '<API_KEY>';
+const apiKey = '<YOUR_API_KEY>';
 
 const app = express();
 app.use(cors())
@@ -21,7 +21,7 @@ app.get('/main.js', function(req, res) {
   res.sendFile(path.join(path.resolve(), './dist/main.js'));
 });
 
-app.post('/sapling/*', (req, res, next) => {
+app.post('/sapling/*splat', (req, res) => {
   let requestPath  = req.path.substring(8);
   let requestUrl = `${SAPLING_API_URL}${requestPath}`;
   req.body.key = apiKey;
@@ -31,9 +31,14 @@ app.post('/sapling/*', (req, res, next) => {
     method: 'post',
   })
   .then(function (response) {
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(response.data));
+      res.status(200).json(response.data);
+  })
+  .catch(function (error) {
+    if (error.response) {
+      res.status(error.response.status).json(error.response.data);
+    } else {
+      res.status(502).json({ msg: 'Error reaching the Sapling API' });
+    }
   });
 })
 

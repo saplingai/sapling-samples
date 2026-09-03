@@ -6,9 +6,17 @@ Documentation for the client is available at [Read the Docs](https://sapling.rea
 
 ## Installation
 
-Install the `sapling-py` package with [pip](https://pip.pypa.io/en/stable/installation/):
-```
+Install the `sapling-py` package from PyPI with
+[pip](https://pip.pypa.io/en/stable/installation/):
+
+```sh
 python -m pip install sapling-py
+```
+
+Or add it to a [uv](https://docs.astral.sh/uv/) project:
+
+```sh
+uv add sapling-py
 ```
 
 ## Running

@@ -52,18 +52,77 @@ merge_in_progress() {
 }
 
 # Conflict markers only: "=======" alone is legitimate in Markdown/RST, so we
-# look for the unambiguous 7-char start/end markers at line start.
+# look for the unambiguous start/end markers at line start. Git's default marker
+# length is 7, but a .gitattributes conflict-marker-size can make it longer, so
+# match seven-or-more marker characters rather than exactly seven.
 scan_markers() {
   # scan_markers <file>...
   local found=0 f
   for f in "$@"; do
     [[ -f "$f" ]] || continue
-    if grep -qE '^(<{7}|>{7})( |$)' -- "$f"; then
+    if grep -qE '^(<{7,}|>{7,})( |$)' -- "$f"; then
       log "conflict markers left in $f"
       found=1
     fi
   done
   return $found
+}
+
+# Text conflicts announce themselves with markers scan_markers can verify. A
+# binary (or otherwise non-text) conflict carries no markers: git just leaves
+# one side's blob in the working tree, so a later `git add -A` would silently
+# adopt whichever side that was. We cannot confirm such a pick was deliberate -
+# even the agent doing nothing looks identical to "keep ours" - so refuse it.
+#
+# Inspect the unmerged index stages (1=base, 2=ours, 3=theirs) rather than the
+# working-tree file: the tree only holds one side, and if that side is empty (a
+# PR that replaced a binary with a zero-byte file, say) a worktree-only check
+# would wave it through. If any stage's blob is non-empty and binary, we cannot
+# verify a resolution, so refuse. Empty blobs are text; a fully deleted side has
+# no stage at all, so delete/modify resolved by removal stays allowed. Symlink
+# and submodule conflicts carry no markers and store only a short ASCII
+# target/hash per stage, so we reject them by their mode rather than by content.
+refuse_binary_conflicts() {
+  local path stage blob tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/resolve-blob.XXXXXX")"
+  # -z gives NUL-terminated raw pathnames, so a name containing a tab, newline or
+  # non-ASCII byte reaches git rev-parse verbatim. Reading the quoted form would
+  # make every stage lookup miss and let the conflict slip through unverified.
+  while IFS= read -r -d '' path; do
+    [[ -n "$path" ]] || continue
+    # A path whose merge attribute is unset (the `binary` macro, or an explicit
+    # `-merge` in .gitattributes) gets no textual three-way merge: git keeps one
+    # side's blob in the working tree and emits no conflict markers, so
+    # scan_markers has nothing to verify. This holds even when both sides are
+    # pure ASCII, so the blob-byte check below cannot catch it. We cannot confirm
+    # such a path was actually reconciled, so refuse it outright.
+    if [[ "$(git check-attr merge -- "$path" 2>/dev/null | sed 's/.*: merge: //')" == "unset" ]]; then
+      rm -f "$tmp"
+      die "conflict at '$path' has merge=unset (binary/-merge attribute) and carries no markers to verify; resolve it by hand"
+    fi
+    # A non-regular unmerged mode - a symlink (120000) or a submodule/gitlink
+    # (160000) - never gets a textual three-way merge either: git leaves one
+    # side in the working tree without markers, and each index stage is only a
+    # short ASCII target/hash so the blob-byte check below classifies it as text
+    # and waves it through. Refuse any such mode outright.
+    while IFS=' ' read -r mode _; do
+      case "$mode" in
+        120000 | 160000)
+          rm -f "$tmp"
+          die "non-regular ($mode) conflict at '$path' carries no markers to verify; resolve it by hand"
+          ;;
+      esac
+    done < <(git ls-files -u -- "$path")
+    for stage in 1 2 3; do
+      blob="$(git rev-parse -q --verify ":${stage}:${path}" 2>/dev/null)" || continue
+      git cat-file -p "$blob" >"$tmp"
+      if [[ -s "$tmp" ]] && ! grep -Iq . -- "$tmp"; then
+        rm -f "$tmp"
+        die "binary/non-text conflict at '$path' cannot be verified automatically; resolve it by hand"
+      fi
+    done
+  done < <(git diff --name-only -z --diff-filter=U)
+  rm -f "$tmp"
 }
 
 save_state() {
@@ -78,6 +137,10 @@ ensure_identity() {
   git config user.name >/dev/null 2>&1 || git config user.name "github-actions[bot]"
   git config user.email >/dev/null 2>&1 ||
     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  # Emit raw pathnames in every `git diff --name-only` below (the marker scan and
+  # conflicted-file bookkeeping read them line-by-line); quoted non-ASCII names
+  # would otherwise miss the file they name.
+  git config core.quotePath false
 }
 
 cmd_prepare() {
@@ -97,6 +160,10 @@ cmd_prepare() {
   save_state "$BASE_REF" base_ref
   save_state "$commits_before" commits_before
   : >"$STATE_DIR/conflicted_files.txt"
+
+  # Surface the base tip we are resolving against so the pushing step can detect
+  # the base moving under a long resolution and refuse to push a stale rebase.
+  out base_sha "$(git rev-parse "$BASE")"
 
   if [[ -z "$merges" ]] && git merge-base --is-ancestor "$BASE" HEAD; then
     save_state 0 had_merges
@@ -176,8 +243,9 @@ replay_with_rerere() {
       git rebase --abort || true
       return 1
     fi
-    # shellcheck disable=SC2046
-    if ! scan_markers $(git diff --name-only HEAD 2>/dev/null); then
+    local changed_files
+    mapfile -t changed_files < <(git diff --name-only HEAD 2>/dev/null)
+    if ! scan_markers "${changed_files[@]}"; then
       log "conflict markers survived rerere at stop #$guard"
       git rebase --abort || true
       return 1
@@ -224,7 +292,12 @@ run_gates() {
   [[ "$(git rev-list --count "${BASE}..HEAD")" -gt 0 ]] || die "gate: branch has no commits over ${BASE}"
   git diff --quiet "${BASE}...HEAD" && die "gate: branch no longer changes anything versus ${BASE}"
 
-  if git diff "${BASE}...HEAD" | grep -qE '^\+(<{7}|>{7})( |$)'; then
+  # Materialize the diff before scanning: `git diff | grep -q` lets grep exit on
+  # the first marker, and the resulting SIGPIPE turns the git side non-zero under
+  # `pipefail`, which would flip this test to the no-marker branch and wave a
+  # conflicted tree through.
+  git diff "${BASE}...HEAD" >"$STATE_DIR/base_diff.txt"
+  if grep -qE '^\+(<{7,}|>{7,})( |$)' "$STATE_DIR/base_diff.txt"; then
     die "gate: conflict markers present in the diff against ${BASE}"
   fi
 
@@ -236,10 +309,16 @@ run_gates() {
   comm -23 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | grep -v '^$' \
     >"$STATE_DIR/dropped_files.txt" || true
 
-  if [[ -x .github/resolve-verify.sh ]]; then
-    log "running repository verification hook .github/resolve-verify.sh"
-    .github/resolve-verify.sh >"$STATE_DIR/verify.log" 2>&1 ||
-      die "gate: .github/resolve-verify.sh failed$(printf '\n')$(tail -40 "$STATE_DIR/verify.log")"
+  # The hook runs with the push credential, so it must come from a trusted
+  # revision, never the PR's own tree. The workflow sets RESOLVE_VERIFY_HOOK to
+  # a copy taken from the default branch (empty when none is trusted). Only the
+  # standalone/test path, which leaves the variable unset, falls back to the
+  # in-tree hook.
+  local verify_hook="${RESOLVE_VERIFY_HOOK-.github/resolve-verify.sh}"
+  if [[ -n "$verify_hook" && -x "$verify_hook" ]]; then
+    log "running repository verification hook $verify_hook"
+    "$verify_hook" >"$STATE_DIR/verify.log" 2>&1 ||
+      die "gate: $verify_hook failed$(printf '\n')$(tail -40 "$STATE_DIR/verify.log")"
   fi
 
   out old_head "$old_head"
@@ -277,6 +356,7 @@ cmd_finish() {
       scan_markers "${conflicted[@]}" || die "conflict markers are still present in the resolved files"
       [[ -z "$(git diff --name-only --diff-filter=U 2>/dev/null | grep -v -F -x -f "$STATE_DIR/conflicted_files.txt" || true)" ]] ||
         die "new unmerged paths appeared during resolution"
+      refuse_binary_conflicts
       git add -A
       [[ -z "$(git ls-files -u)" ]] || die "unmerged paths remain after staging the resolution"
       git commit --quiet --no-edit

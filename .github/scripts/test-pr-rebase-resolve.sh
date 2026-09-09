@@ -230,5 +230,100 @@ run "$S" finish >"$S/fin.out"
 check "tier" 3 "$(get "$S/fin.out" tier)"
 [[ -f other.txt ]] && bad "file came back" || ok "deletion preserved"
 
+# ------------------------------------------ case 8: binary conflict -> gate fails
+say "case 8: unverifiable binary conflict must fail the gate, not force-push a side"
+use_repo binary
+printf 'base\x00blob\n' >logo.bin # shared ancestor version, contains a NUL -> binary
+git add -A && git commit -qm "add binary asset"
+git push -q origin master
+git checkout -q -b binmod
+printf 'pr\x00blob\n' >logo.bin
+git commit -qam "pr changes binary"
+git push -q origin binmod
+git checkout -q master
+printf 'master\x00blob\n' >logo.bin
+git commit -qam "master changes binary"
+git push -q origin master
+git checkout -q binmod
+S="$ROOT/s8"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+# The agent does nothing; git left one side's blob in the tree. finish must not
+# silently stage and force-push it.
+if run "$S" finish >"$S/fin.out"; then bad "finish accepted an unverifiable binary conflict"
+else ok "finish refused the binary conflict"; fi
+
+# ------------------------- case 9: zero-byte side of a binary conflict -> gate fails
+say "case 9: binary conflict whose PR side is empty must still fail the gate"
+use_repo binaryzero
+printf 'base\x00blob\n' >logo.bin # shared ancestor, binary
+git add -A && git commit -qm "add binary asset"
+git push -q origin master
+git checkout -q -b binzero
+: >logo.bin # PR replaces the binary with a zero-byte file
+git commit -qam "pr empties binary"
+git push -q origin binzero
+git checkout -q master
+printf 'master\x00blob\n' >logo.bin
+git commit -qam "master changes binary"
+git push -q origin master
+git checkout -q binzero
+S="$ROOT/s9"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+# The agent does nothing; git left the empty PR blob in the tree. A worktree-only
+# check would wave the zero-byte file through, so finish must inspect the stages.
+if run "$S" finish >"$S/fin.out"; then bad "finish accepted a zero-byte binary conflict"
+else ok "finish refused the zero-byte binary conflict"; fi
+
+# ------------- case 10: longer configured conflict-marker size still detected
+say "case 10: unresolved markers longer than 7 chars must fail the gate"
+use_repo longmarker
+printf '* conflict-marker-size=12\n' >.gitattributes
+git add -A && git commit -qm "widen conflict markers"
+git push -q origin master
+git checkout -q -b widefix
+sed -i 's/line2/line2-from-pr/' app.txt
+git commit -qam "pr edits line2"
+git push -q origin widefix
+git checkout -q master
+sed -i 's/line2/line2-from-master/' app.txt
+git commit -qam "master edits line2"
+git push -q origin master
+git checkout -q widefix
+S="$ROOT/s10"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+# "agent" does nothing, leaving 12-char markers behind.
+if run "$S" finish >"$S/fin.out"; then bad "finish accepted 12-char conflict markers"
+else ok "finish refused the wide markers"; fi
+
+# ---------------- case 11: marker-free symlink conflict -> gate fails
+say "case 11: divergent symlink retarget must fail the gate, not force-push a side"
+use_repo symlink
+ln -s target-base link
+git add -A && git commit -qm "add symlink"
+git push -q origin master
+git checkout -q -b symfix
+ln -sf target-pr link
+git commit -qam "pr retargets symlink"
+git push -q origin symfix
+git checkout -q master
+ln -sf target-master link
+git commit -qam "master retargets symlink"
+git push -q origin master
+git checkout -q symfix
+S="$ROOT/s11"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+# "agent" does nothing; git left the PR's symlink target in the tree with no
+# markers. finish must reject the non-regular conflict instead of staging it.
+if run "$S" finish >"$S/fin.out"; then bad "finish accepted a marker-free symlink conflict"
+else ok "finish refused the symlink conflict"; fi
+
 printf '\n---- %d passed, %d failed ----\n' "$PASS" "$FAIL"
 [[ $FAIL -eq 0 ]]

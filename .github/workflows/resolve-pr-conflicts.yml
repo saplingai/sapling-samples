@@ -72,6 +72,27 @@ jobs:
             "repos/$REPO/issues/comments/${{ github.event.comment.id }}/reactions" \
             -f content=eyes || true
 
+      # Association is not permission: a MEMBER or COLLABORATOR can hold only
+      # read/triage. Ask for the commenter's actual permission before any branch
+      # code is checked out - the no-conflict path never reaches the agent
+      # action, which does its own write-access check.
+      - name: Require write access
+        shell: bash
+        env:
+          ACTOR: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          level=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission 2>/dev/null || echo none)
+          case "$level" in
+            write | admin) echo "$ACTOR has $level access" ;;
+            *)
+              gh pr comment "$PR" --repo "$REPO" \
+                --body "\`resolve\` needs write access to this repository; \`$ACTOR\` has \`$level\`."
+              echo "::error::$ACTOR has '$level' permission, not write/admin"
+              exit 1
+              ;;
+          esac
+
       - name: Load pull request
         id: pr
         shell: bash
@@ -134,6 +155,40 @@ jobs:
           # GITHUB_TOKEN cannot trigger workflows from its own pushes.
           token: ${{ secrets.PR_RESOLVER_TOKEN || github.token }}
 
+      # The checked-out tree belongs to the PR while this job holds a push
+      # credential, so the resolver and the verification hook must come from the
+      # default branch instead - a branch cannot rewrite the code that pushes it.
+      - name: Take the resolver from the default branch
+        id: trusted
+        if: steps.pr.outputs.proceed == 'true'
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/trusted"
+          mkdir -p "$dir"
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+
+          if ! git show "origin/$DEFAULT_BRANCH:.github/scripts/pr-rebase-resolve.sh" \
+            >"$dir/resolver.sh" 2>/dev/null; then
+            echo "::error::.github/scripts/pr-rebase-resolve.sh is missing on $DEFAULT_BRANCH"
+            exit 1
+          fi
+          chmod +x "$dir/resolver.sh"
+          echo "resolver=$dir/resolver.sh" >>"$GITHUB_OUTPUT"
+
+          # Empty means "no trusted hook", which the resolver reads as "skip it"
+          # rather than falling back to the PR's own copy.
+          hook=""
+          if git show "origin/$DEFAULT_BRANCH:.github/resolve-verify.sh" \
+            >"$dir/resolve-verify.sh" 2>/dev/null; then
+            chmod +x "$dir/resolve-verify.sh"
+            hook="$dir/resolve-verify.sh"
+          fi
+          echo "hook=$hook" >>"$GITHUB_OUTPUT"
+
       - name: Rebase, or stage the conflicts for the agent
         id: prepare
         if: steps.pr.outputs.proceed == 'true'
@@ -141,7 +196,8 @@ jobs:
         env:
           BASE_REF: ${{ steps.pr.outputs.base_ref }}
           RESOLVE_STATE_DIR: ${{ runner.temp }}/pr-resolve
-        run: bash .github/scripts/pr-rebase-resolve.sh prepare
+          RESOLVE_VERIFY_HOOK: ${{ steps.trusted.outputs.hook }}
+        run: bash "${{ steps.trusted.outputs.resolver }}" prepare
 
       - name: Require an OpenAI key before calling the agent
         if: steps.prepare.outputs.status == 'conflict' && env.HAS_OPENAI_KEY != 'true'
@@ -154,6 +210,9 @@ jobs:
       - name: Resolve the conflicts with Codex
         id: agent
         if: steps.prepare.outputs.status == 'conflict'
+        env:
+          # The agent needs no GitHub credential; keep the job's out of its env.
+          GH_TOKEN: ""
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -207,7 +266,8 @@ jobs:
           BASE_REF: ${{ steps.pr.outputs.base_ref }}
           PR_TITLE: ${{ steps.pr.outputs.title }}
           RESOLVE_STATE_DIR: ${{ runner.temp }}/pr-resolve
-        run: bash .github/scripts/pr-rebase-resolve.sh finish
+          RESOLVE_VERIFY_HOOK: ${{ steps.trusted.outputs.hook }}
+        run: bash "${{ steps.trusted.outputs.resolver }}" finish
 
       - name: Push the rebased branch
         id: push
@@ -216,11 +276,44 @@ jobs:
         env:
           HEAD_REF: ${{ steps.pr.outputs.head_ref }}
           OLD_SHA: ${{ steps.pr.outputs.head_sha }}
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
+          BASE_SHA: ${{ steps.prepare.outputs.base_sha }}
         run: |
           set -euo pipefail
           git push --force-with-lease="refs/heads/$HEAD_REF:$OLD_SHA" \
             origin "HEAD:refs/heads/$HEAD_REF"
           echo "pushed=true" >>"$GITHUB_OUTPUT"
+
+          # The base can move while the agent works, which would leave this
+          # rebase computed against a stale tip. Say so rather than guess.
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          now=$(git rev-parse "origin/$BASE_REF")
+          if [[ "$now" != "$BASE_SHA" ]]; then
+            echo "base_moved=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      # GitHub recomputes mergeability asynchronously, so poll rather than
+      # assert. This is the real proof the PR became rebase-mergeable.
+      - name: Confirm GitHub can rebase it
+        id: confirm
+        if: steps.push.outputs.pushed == 'true'
+        shell: bash
+        run: |
+          set -uo pipefail
+          for _ in 1 2 3 4 5 6; do
+            value=$(gh api graphql \
+              -H "Accept: application/vnd.github.merge-info-preview+json" \
+              -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){canBeRebased}}}' \
+              -F o="${REPO%/*}" -F r="${REPO#*/}" -F n="$PR" \
+              --jq .data.repository.pullRequest.canBeRebased 2>/dev/null || echo null)
+            if [[ "$value" == "true" || "$value" == "false" ]]; then
+              echo "can_be_rebased=$value" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "can_be_rebased=unknown" >>"$GITHUB_OUTPUT"
 
       - name: Report back on the pull request
         if: always() && steps.pr.outputs.proceed == 'true'
@@ -236,6 +329,8 @@ jobs:
           COMMITS_BEFORE: ${{ steps.finish.outputs.commits_before }}
           COMMITS_AFTER: ${{ steps.finish.outputs.commits_after }}
           USED_PAT: ${{ env.HAS_PUSH_PAT }}
+          BASE_MOVED: ${{ steps.push.outputs.base_moved }}
+          CAN_REBASE: ${{ steps.confirm.outputs.can_be_rebased }}
           RESOLVE_STATE_DIR: ${{ runner.temp }}/pr-resolve
         run: |
           set -uo pipefail
@@ -248,11 +343,23 @@ jobs:
               3) how="conflicts resolved and the branch squashed onto \`$BASE_REF\` (its previous shape could not be replayed linearly)" ;;
               *) how="rebased onto \`$BASE_REF\`" ;;
             esac
+            case "$CAN_REBASE" in
+              true) title="Branch is now rebase-mergeable" ;;
+              false) title="Pushed, but GitHub still cannot rebase it" ;;
+              *) title="Pushed; GitHub has not finished recomputing mergeability" ;;
+            esac
             {
-              echo "### Branch is now rebase-mergeable"
+              echo "### $title"
               echo
               echo "$how."
               echo
+              if [[ "$BASE_MOVED" == "true" ]]; then
+                echo "> \`$BASE_REF\` moved while this was being resolved, so the rebase is against a slightly older tip. If GitHub reports conflicts, comment \`resolve\` again."
+                echo
+              elif [[ "$CAN_REBASE" == "false" ]]; then
+                echo "> GitHub's \`canBeRebased\` is still false after the push - see the run log, and comment \`resolve\` again if \`$BASE_REF\` has moved."
+                echo
+              fi
               echo "| | |"
               echo "|---|---|"
               echo "| Previous head | \`$OLD_SHA\` |"
@@ -284,6 +391,7 @@ jobs:
               echo "[Run log]($RUN_URL)"
             } >"$body"
             reaction=rocket
+            [[ "$CAN_REBASE" == "true" ]] || reaction=eyes
           elif [[ "$TIER" == "0" ]]; then
             {
               echo "### Nothing to do"

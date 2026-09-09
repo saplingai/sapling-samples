@@ -5,9 +5,10 @@
 #
 # Every case builds a throwaway bare origin plus a clone under a mktemp root and
 # asserts it never leaves that tree; nothing here touches a real repository.
+# Portable to macOS: no readlink -f, no GNU sed -i.
 set -euo pipefail
 
-SCRIPT="$(readlink -f "$1")"
+SCRIPT="$(cd "$(dirname "${1:?path to pr-rebase-resolve.sh is required}")" && pwd)/$(basename "$1")"
 ROOT="$(mktemp -d)"
 trap 'cd / && rm -rf "$ROOT"' EXIT
 cd "$ROOT" || exit 1
@@ -36,7 +37,7 @@ make_repo() {
   mkdir -p "$d.origin"
   git init -q --bare "$d.origin"
   git --git-dir="$d.origin" symbolic-ref HEAD refs/heads/master
-  git clone -q "$d.origin" "$d"
+  git clone -q "$d.origin" "$d" 2>/dev/null
   cd "$d" || { echo "FATAL: cannot enter scratch repo $d" >&2; exit 1; }
   # Hard guard: never operate on anything but the scratch clone.
   [[ "$(git rev-parse --show-toplevel)" == "$d" ]] || { echo "FATAL: not in scratch repo" >&2; exit 1; }
@@ -48,7 +49,6 @@ make_repo() {
   git add -A
   git commit -qm "initial"
   git push -q origin master
-  echo "$d"
 }
 
 # NB: call directly, never as "$(use_repo x)" - command substitution runs in a
@@ -59,12 +59,15 @@ use_repo() {
   guard_cwd
 }
 
+# edit in place without GNU sed -i
+sub() { perl -pi -e "s/$1/$2/" "$3"; }
+
 # resolve every conflicted file by keeping both sides (stand-in for the agent)
 fake_agent() {
   local f
   while IFS= read -r f; do
     [[ -f "$f" ]] || continue
-    perl -0pi -e 's/^<{7}[^\n]*\n(.*?)^={7}\n(.*?)^>{7}[^\n]*\n/$1$2/gms' "$f"
+    perl -0pi -e 's/^<{3,}[^\n]*\n(.*?)^={3,}\n(.*?)^>{3,}[^\n]*\n/$1$2/gms' "$f"
   done <"$1"
 }
 
@@ -74,6 +77,32 @@ run() {
 }
 
 get() { grep "^$2=" "$1" | tail -1 | cut -d= -f2-; }
+
+# PR branch <name> edits line2 one way, master edits it another -> conflict
+diverge_line2() {
+  git checkout -q -b "$1"
+  sub line2 line2-from-pr app.txt
+  git commit -qam "pr edits line2"
+  git push -q origin "$1"
+  git checkout -q master
+  sub line2 line2-from-master app.txt
+  git commit -qam "master edits line2"
+  git push -q origin master
+  git checkout -q "$1"
+}
+
+# PR branch <name> deletes other.txt, master edits it -> modify/delete conflict
+diverge_delete() {
+  git checkout -q -b "$1"
+  git rm -q other.txt
+  git commit -qm "pr deletes other.txt"
+  git push -q origin "$1"
+  git checkout -q master
+  printf 'master addition\n' >>other.txt
+  git commit -qam "master edits other.txt"
+  git push -q origin master
+  git checkout -q "$1"
+}
 
 # ---------------------------------------------------------------- case 1: clean
 say "case 1: branch behind base, no conflicts -> tier 1 (history preserved)"
@@ -101,15 +130,7 @@ git merge-base --is-ancestor origin/master HEAD && ok "contains base" || bad "mi
 # ------------------------------------------------- case 2: conflict, one commit
 say "case 2: conflicting single-commit branch -> tier 3 (squash onto base)"
 use_repo conflict1
-git checkout -q -b fix
-sed -i 's/line2/line2-from-pr/' app.txt
-git commit -qam "pr edits line2"
-git push -q origin fix
-git checkout -q master
-sed -i 's/line2/line2-from-master/' app.txt
-git commit -qam "master edits line2"
-git push -q origin master
-git checkout -q fix
+diverge_line2 fix
 S="$ROOT/s2"
 mkdir -p "$S"
 run "$S" prepare >"$S/prep.out"
@@ -127,13 +148,13 @@ grep -qE '^(<{7}|>{7})' app.txt && bad "markers left" || ok "no markers"
 say "case 3: conflicting multi-commit branch -> tier 2 (rerere replay keeps commits)"
 use_repo conflict2
 git checkout -q -b multi
-sed -i 's/line2/line2-from-pr/' app.txt
+sub line2 line2-from-pr app.txt
 git commit -qam "pr edits line2"
 printf 'second commit\n' >>notes.txt
 git add -A && git commit -qm "pr adds notes"
 git push -q origin multi
 git checkout -q master
-sed -i 's/line2/line2-from-master/' app.txt
+sub line2 line2-from-master app.txt
 git commit -qam "master edits line2"
 git push -q origin master
 git checkout -q multi
@@ -153,18 +174,17 @@ grep -q 'line2-from-master' app.txt && grep -q 'line2-from-pr' app.txt &&
 say "case 4: branch already carrying a merge commit -> flattened, canBeRebased-safe"
 use_repo merged
 git checkout -q -b merged-branch
-sed -i 's/line3/line3-from-pr/' app.txt
+sub line3 line3-from-pr app.txt
 git commit -qam "pr edits line3"
 git push -q origin merged-branch
 git checkout -q master
-sed -i 's/line1/line1-from-master/' app.txt
+sub line1 line1-from-master app.txt
 git commit -qam "master edits line1"
 git push -q origin master
 git checkout -q merged-branch
 git merge -q --no-ff -m "Merge branch 'master' into merged-branch" origin/master
 git push -q origin merged-branch
-before_merges="$(git rev-list --count --min-parents=2 origin/master..HEAD)"
-check "setup has a merge commit" 1 "$before_merges"
+check "setup has a merge commit" 1 "$(git rev-list --count --min-parents=2 origin/master..HEAD)"
 S="$ROOT/s4"
 mkdir -p "$S"
 run "$S" prepare >"$S/prep.out"
@@ -194,34 +214,18 @@ check "head untouched" "$head_before" "$(git rev-parse HEAD)"
 # -------------------------------------------- case 6: agent leaves markers -> gate
 say "case 6: unresolved markers must fail the gate, not push"
 use_repo markers
-git checkout -q -b sloppy
-sed -i 's/line2/line2-from-pr/' app.txt
-git commit -qam "pr edits line2"
-git push -q origin sloppy
-git checkout -q master
-sed -i 's/line2/line2-from-master/' app.txt
-git commit -qam "master edits line2"
-git push -q origin master
-git checkout -q sloppy
+diverge_line2 sloppy
 S="$ROOT/s6"
 mkdir -p "$S"
 run "$S" prepare >"$S/prep.out"
 # "agent" does nothing at all
-if run "$S" finish >"$S/fin.out" || false; then bad "finish should have failed on leftover markers"
+if run "$S" finish >"$S/fin.out"; then bad "finish should have failed on leftover markers"
 else ok "finish refused the unresolved tree"; fi
 
 # ------------------------------------- case 7: delete/modify conflict resolution
-say "case 7: delete/modify conflict resolved by deletion"
+say "case 7: modify/delete conflict resolved by deletion"
 use_repo delmod
-git checkout -q -b dropper
-git rm -q other.txt
-git commit -qm "pr deletes other.txt"
-git push -q origin dropper
-git checkout -q master
-printf 'master addition\n' >>other.txt
-git commit -qam "master edits other.txt"
-git push -q origin master
-git checkout -q dropper
+diverge_delete dropper
 S="$ROOT/s7"
 mkdir -p "$S"
 run "$S" prepare >"$S/prep.out"
@@ -231,8 +235,8 @@ run "$S" finish >"$S/fin.out"
 check "tier" 3 "$(get "$S/fin.out" tier)"
 [[ -f other.txt ]] && bad "file came back" || ok "deletion preserved"
 
-# ------------------------------------------ case 8: binary conflict -> gate fails
-say "case 8: unverifiable binary conflict must fail the gate, not force-push a side"
+# ------------------------------------------------ case 8: binary conflict refused
+say "case 8: unverifiable binary conflict must be refused before any agent runs"
 use_repo binary
 printf 'base\x00blob\n' >logo.bin # shared ancestor version, contains a NUL -> binary
 git add -A && git commit -qm "add binary asset"
@@ -248,17 +252,14 @@ git push -q origin master
 git checkout -q binmod
 S="$ROOT/s8"
 mkdir -p "$S"
-run "$S" prepare >"$S/prep.out"
-check "status" conflict "$(get "$S/prep.out" status)"
-# The agent does nothing; git left one side's blob in the tree. finish must not
-# silently stage and force-push it.
-if run "$S" finish >"$S/fin.out"; then bad "finish accepted an unverifiable binary conflict"
-else ok "finish refused the binary conflict"; fi
+if run "$S" prepare >"$S/prep.out"; then bad "prepare accepted an unverifiable binary conflict"
+else ok "prepare refused the binary conflict"; fi
+grep -q 'binary/non-text' "$S/error.txt" && ok "reason names the binary" || bad "reason missing"
 
-# ------------------------- case 9: zero-byte side of a binary conflict -> gate fails
-say "case 9: binary conflict whose PR side is empty must still fail the gate"
+# ------------------------- case 9: zero-byte side of a binary conflict refused
+say "case 9: binary conflict whose PR side is empty must still be refused"
 use_repo binaryzero
-printf 'base\x00blob\n' >logo.bin # shared ancestor, binary
+printf 'base\x00blob\n' >logo.bin
 git add -A && git commit -qm "add binary asset"
 git push -q origin master
 git checkout -q -b binzero
@@ -272,12 +273,8 @@ git push -q origin master
 git checkout -q binzero
 S="$ROOT/s9"
 mkdir -p "$S"
-run "$S" prepare >"$S/prep.out"
-check "status" conflict "$(get "$S/prep.out" status)"
-# The agent does nothing; git left the empty PR blob in the tree. A worktree-only
-# check would wave the zero-byte file through, so finish must inspect the stages.
-if run "$S" finish >"$S/fin.out"; then bad "finish accepted a zero-byte binary conflict"
-else ok "finish refused the zero-byte binary conflict"; fi
+if run "$S" prepare >"$S/prep.out"; then bad "prepare accepted a zero-byte binary conflict"
+else ok "prepare refused the zero-byte binary conflict"; fi
 
 # ------------- case 10: longer configured conflict-marker size still detected
 say "case 10: unresolved markers longer than 7 chars must fail the gate"
@@ -285,15 +282,7 @@ use_repo longmarker
 printf '* conflict-marker-size=12\n' >.gitattributes
 git add -A && git commit -qm "widen conflict markers"
 git push -q origin master
-git checkout -q -b widefix
-sed -i 's/line2/line2-from-pr/' app.txt
-git commit -qam "pr edits line2"
-git push -q origin widefix
-git checkout -q master
-sed -i 's/line2/line2-from-master/' app.txt
-git commit -qam "master edits line2"
-git push -q origin master
-git checkout -q widefix
+diverge_line2 widefix
 S="$ROOT/s10"
 mkdir -p "$S"
 run "$S" prepare >"$S/prep.out"
@@ -302,8 +291,8 @@ check "status" conflict "$(get "$S/prep.out" status)"
 if run "$S" finish >"$S/fin.out"; then bad "finish accepted 12-char conflict markers"
 else ok "finish refused the wide markers"; fi
 
-# ---------------- case 11: marker-free symlink conflict -> gate fails
-say "case 11: divergent symlink retarget must fail the gate, not force-push a side"
+# ---------------- case 11: marker-free symlink conflict refused
+say "case 11: divergent symlink retarget must be refused, not force-push a side"
 use_repo symlink
 ln -s target-base link
 git add -A && git commit -qm "add symlink"
@@ -319,36 +308,152 @@ git push -q origin master
 git checkout -q symfix
 S="$ROOT/s11"
 mkdir -p "$S"
-run "$S" prepare >"$S/prep.out"
-check "status" conflict "$(get "$S/prep.out" status)"
-# "agent" does nothing; git left the PR's symlink target in the tree with no
-# markers. finish must reject the non-regular conflict instead of staging it.
-if run "$S" finish >"$S/fin.out"; then bad "finish accepted a marker-free symlink conflict"
-else ok "finish refused the symlink conflict"; fi
+if run "$S" prepare >"$S/prep.out"; then bad "prepare accepted a marker-free symlink conflict"
+else ok "prepare refused the symlink conflict"; fi
 
-# ------------- case 12: untracked files in the tree must not ride along
-say "case 12: an untracked file left by tooling must not be committed or block the gates"
+# ------------- case 12: pre-existing untracked files must not ride along
+say "case 12: an untracked artifact present before prepare is neither committed nor a gate failure"
 use_repo untracked
-git checkout -q -b strayfix
-sed -i 's/line2/line2-from-pr/' app.txt
-git commit -qam "pr edits line2"
-git push -q origin strayfix
-git checkout -q master
-sed -i 's/line2/line2-from-master/' app.txt
-git commit -qam "master edits line2"
-git push -q origin master
-git checkout -q strayfix
+diverge_line2 strayfix
+printf 'build cache\n' >stray-artifact.txt # present before the resolver starts
 S="$ROOT/s12"
 mkdir -p "$S"
 run "$S" prepare >"$S/prep.out"
 check "status" conflict "$(get "$S/prep.out" status)"
 fake_agent "$S/conflicted_files.txt"
-printf 'agent transcript\n' >codex-resolution.md # what an agent action leaves behind
 run "$S" finish >"$S/fin.out"
 check "tier" 3 "$(get "$S/fin.out" tier)"
-git ls-files --error-unmatch codex-resolution.md >/dev/null 2>&1 &&
-  bad "untracked tooling file was committed into the branch" || ok "untracked file left alone"
-[[ -f codex-resolution.md ]] && ok "untracked file still on disk" || bad "untracked file was deleted"
+git ls-files --error-unmatch stray-artifact.txt >/dev/null 2>&1 &&
+  bad "pre-existing untracked file was committed" || ok "pre-existing untracked file left alone"
+[[ -f stray-artifact.txt ]] && ok "untracked file still on disk" || bad "untracked file was deleted"
+
+# --------------- case 13: a file the resolution creates must be committed
+say "case 13: a rename made by the resolution (new file + deleted old) is committed whole"
+use_repo rename
+diverge_line2 renamefix
+S="$ROOT/s13"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+fake_agent "$S/conflicted_files.txt"
+git mv -q other.txt other-renamed.txt 2>/dev/null || { mv other.txt other-renamed.txt; }
+git reset -q other.txt other-renamed.txt 2>/dev/null || true # leave it as delete + untracked, as an agent would
+run "$S" finish >"$S/fin.out"
+check "tier" 3 "$(get "$S/fin.out" tier)"
+git ls-files --error-unmatch other-renamed.txt >/dev/null 2>&1 &&
+  ok "rename destination committed" || bad "rename destination was dropped"
+git ls-files --error-unmatch other.txt >/dev/null 2>&1 &&
+  bad "old path still tracked" || ok "old path removed"
+
+# ---------------- case 14: markerless modify/delete left untouched -> gate fails
+say "case 14: modify/delete left at git's default (agent did nothing) must fail"
+use_repo delmodnoop
+diverge_delete dropper2
+S="$ROOT/s14"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+# "agent" does nothing: git left master's edited other.txt in the tree with no
+# markers. Staging it would silently drop the PR's deletion.
+if run "$S" finish >"$S/fin.out"; then bad "finish accepted an untouched modify/delete"
+else ok "finish refused the untouched modify/delete"; fi
+
+# ---------------- case 15: modify/delete reconciled by editing the file -> ok
+say "case 15: modify/delete resolved by editing the surviving file is accepted"
+use_repo delmodedit
+diverge_delete dropper3
+S="$ROOT/s15"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+printf 'reconciled\n' >other.txt # agent makes a visible decision to keep and edit
+run "$S" finish >"$S/fin.out"
+check "tier" 3 "$(get "$S/fin.out" tier)"
+[[ -f other.txt ]] && ok "reconciled file kept" || bad "reconciled file vanished"
+
+# ------------- case 16: shorter configured conflict-marker size still detected
+say "case 16: unresolved markers shorter than 7 chars must fail the gate"
+use_repo shortmarker
+printf '* conflict-marker-size=3\n' >.gitattributes
+git add -A && git commit -qm "narrow conflict markers"
+git push -q origin master
+diverge_line2 narrowfix
+S="$ROOT/s16"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+# "agent" does nothing, leaving 3-char markers behind.
+if run "$S" finish >"$S/fin.out"; then bad "finish accepted 3-char conflict markers"
+else ok "finish refused the short markers"; fi
+
+# --------- case 17: a newline-only text stage must not be misflagged as binary
+say "case 17: a conflict whose PR side is only newlines must resolve as text"
+use_repo newline
+printf 'keep\n' >blank.txt
+git add -A && git commit -qm "add blank.txt"
+git push -q origin master
+git checkout -q -b nlfix
+printf '\n\n' >blank.txt # PR reduces the file to blank lines - still text
+git commit -qam "pr blanks the file"
+git push -q origin nlfix
+git checkout -q master
+printf 'master edit\n' >blank.txt
+git commit -qam "master edits blank.txt"
+git push -q origin master
+git checkout -q nlfix
+S="$ROOT/s17"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+fake_agent "$S/conflicted_files.txt"
+run "$S" finish >"$S/fin.out"
+check "tier" 3 "$(get "$S/fin.out" tier)"
+grep -q 'master edit' blank.txt &&
+  ok "newline-only stage accepted as text" || bad "resolution refused or dropped a side"
+
+# --- case 18: a conflicted path git would C-quote must be refused, not mis-scanned
+say "case 18: a conflicted path containing a control character is refused up front"
+use_repo ctrlpath
+fname=$'weird\tname.txt' # a literal tab; git C-quotes this in --name-only output
+printf 'base\n' >"$fname"
+git add -A && git commit -qm "add control-character path"
+git push -q origin master
+git checkout -q -b ctrlfix
+printf 'pr\n' >"$fname"
+git commit -qam "pr edits it"
+git push -q origin ctrlfix
+git checkout -q master
+printf 'master\n' >"$fname"
+git commit -qam "master edits it"
+git push -q origin master
+git checkout -q ctrlfix
+S="$ROOT/s18"
+mkdir -p "$S"
+if run "$S" prepare >"$S/prep.out"; then bad "prepare accepted a control-character path"
+else ok "prepare refused the control-character path"; fi
+
+# ------------------ case 19: a present-but-unrunnable verify hook is a failure
+say "case 19: a verification hook that exists but is not executable fails the gate"
+use_repo hook
+mkdir -p .github
+printf '#!/bin/sh\nexit 0\n' >.github/resolve-verify.sh # deliberately not chmod +x
+git add -A && git commit -qm "add hook without exec bit"
+git push -q origin master
+git checkout -q -b hookfix
+printf 'x\n' >>app.txt
+git commit -qam "pr edit"
+git push -q origin hookfix
+git checkout -q master
+printf 'y\n' >>other.txt
+git commit -qam "master edit"
+git push -q origin master
+git checkout -q hookfix
+S="$ROOT/s19"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" clean "$(get "$S/prep.out" status)"
+if run "$S" finish >"$S/fin.out"; then bad "finish skipped a non-executable hook silently"
+else ok "finish refused the non-executable hook"; fi
 
 printf '\n---- %d passed, %d failed ----\n' "$PASS" "$FAIL"
 [[ $FAIL -eq 0 ]]

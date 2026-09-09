@@ -326,5 +326,29 @@ check "status" conflict "$(get "$S/prep.out" status)"
 if run "$S" finish >"$S/fin.out"; then bad "finish accepted a marker-free symlink conflict"
 else ok "finish refused the symlink conflict"; fi
 
+# ------------- case 12: untracked files in the tree must not ride along
+say "case 12: an untracked file left by tooling must not be committed or block the gates"
+use_repo untracked
+git checkout -q -b strayfix
+sed -i 's/line2/line2-from-pr/' app.txt
+git commit -qam "pr edits line2"
+git push -q origin strayfix
+git checkout -q master
+sed -i 's/line2/line2-from-master/' app.txt
+git commit -qam "master edits line2"
+git push -q origin master
+git checkout -q strayfix
+S="$ROOT/s12"
+mkdir -p "$S"
+run "$S" prepare >"$S/prep.out"
+check "status" conflict "$(get "$S/prep.out" status)"
+fake_agent "$S/conflicted_files.txt"
+printf 'agent transcript\n' >codex-resolution.md # what an agent action leaves behind
+run "$S" finish >"$S/fin.out"
+check "tier" 3 "$(get "$S/fin.out" tier)"
+git ls-files --error-unmatch codex-resolution.md >/dev/null 2>&1 &&
+  bad "untracked tooling file was committed into the branch" || ok "untracked file left alone"
+[[ -f codex-resolution.md ]] && ok "untracked file still on disk" || bad "untracked file was deleted"
+
 printf '\n---- %d passed, %d failed ----\n' "$PASS" "$FAIL"
 [[ $FAIL -eq 0 ]]

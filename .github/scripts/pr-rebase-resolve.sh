@@ -145,11 +145,20 @@ ensure_identity() {
 
 cmd_prepare() {
   ensure_identity
+  # actions/checkout defaults to a shallow clone (fetch-depth: 1); the rebase and
+  # merge-base lookups below need real history. Unshallow first when we're shallow
+  # (the guard makes it a no-op on a complete clone, where --unshallow errors).
+  if [[ -f "$(git rev-parse --git-path shallow)" ]]; then
+    log "repository is shallow; fetching full history so merge-base can be found"
+    git fetch --unshallow --no-tags --quiet origin || true
+  fi
   git fetch --no-tags --quiet origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
   rebase_in_progress && die "a rebase is already in progress in this checkout"
   merge_in_progress && die "a merge is already in progress in this checkout"
-  [[ -z "$(git status --porcelain)" ]] || die "working tree is dirty before we started"
+  # -uno: untracked files (CI caches, build artifacts) don't block a rebase; only
+  # dirty tracked changes mean a genuinely unclean starting state.
+  [[ -z "$(git status --porcelain -uno)" ]] || die "working tree is dirty before we started"
 
   local old_head merges commits_before
   old_head="$(git rev-parse HEAD)"
@@ -250,7 +259,9 @@ replay_with_rerere() {
       git rebase --abort || true
       return 1
     fi
-    git add -A
+    # -u only: stage the tracked files rerere just resolved, never untracked
+    # artifacts CI or the agent may have left in the tree.
+    git add -u
     rc=0
     if git diff --cached --quiet; then
       GIT_EDITOR=true git rebase --skip >>"$STATE_DIR/replay.log" 2>&1 || rc=$?
@@ -279,13 +290,13 @@ Previous head: $(read_state old_head)"
 }
 
 run_gates() {
-  local old_head new_head merge_base_before before after dropped
+  local old_head new_head merge_base_before
   old_head="$(read_state old_head)"
   new_head="$(git rev-parse HEAD)"
 
   rebase_in_progress && die "gate: a rebase is still in progress"
   merge_in_progress && die "gate: a merge is still in progress"
-  [[ -z "$(git status --porcelain)" ]] || die "gate: working tree is not clean"
+  [[ -z "$(git status --porcelain -uno)" ]] || die "gate: working tree is not clean"
   git merge-base --is-ancestor "$BASE" HEAD || die "gate: HEAD does not contain ${BASE}"
   [[ -z "$(git rev-list --min-parents=2 "${BASE}..HEAD")" ]] ||
     die "gate: branch still contains a merge commit, GitHub cannot rebase-merge it"
@@ -304,9 +315,9 @@ run_gates() {
   # Files the PR used to touch that it no longer touches. Legitimate when the
   # base already absorbed the change, suspicious otherwise - reported, not fatal.
   merge_base_before="$(git merge-base "$BASE" "$old_head")"
-  before="$(git diff --name-only "$merge_base_before" "$old_head" | sort)"
-  after="$(git diff --name-only "${BASE}...HEAD" | sort)"
-  comm -23 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | grep -v '^$' \
+  comm -23 \
+    <(git diff --name-only "$merge_base_before" "$old_head" | sort) \
+    <(git diff --name-only "${BASE}...HEAD" | sort) \
     >"$STATE_DIR/dropped_files.txt" || true
 
   # The hook runs with the push credential, so it must come from a trusted
@@ -357,7 +368,9 @@ cmd_finish() {
       [[ -z "$(git diff --name-only --diff-filter=U 2>/dev/null | grep -v -F -x -f "$STATE_DIR/conflicted_files.txt" || true)" ]] ||
         die "new unmerged paths appeared during resolution"
       refuse_binary_conflicts
-      git add -A
+      # -u only: stage the agent's resolution of tracked files (incl. any clean
+      # tracked edits it needed), never stray untracked artifacts from CI/tooling.
+      git add -u
       [[ -z "$(git ls-files -u)" ]] || die "unmerged paths remain after staging the resolution"
       git commit --quiet --no-edit
       tier=""

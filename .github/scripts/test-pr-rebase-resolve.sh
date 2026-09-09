@@ -9,6 +9,7 @@ set -euo pipefail
 
 SCRIPT="$(readlink -f "$1")"
 ROOT="$(mktemp -d)"
+trap 'cd / && rm -rf "$ROOT"' EXIT
 cd "$ROOT" || exit 1
 PASS=0
 FAIL=0

@@ -19,3 +19,5 @@ Run `npm run server`
 
 
 Then visit [http://localhost:3000](http://localhost:3000) to view the app in your browser.
+
+Click **Check AI** to run AI detection on the editor's text. You'll see an overall score, and the sentences flagged as AI-generated are highlighted.

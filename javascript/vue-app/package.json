@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@saplingai/sapling-js": "^1.0.38",
+    "@saplingai/sapling-js": "^1.0.54",
     "vue": "^3.5.0"
   },
   "devDependencies": {

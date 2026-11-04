@@ -14,7 +14,7 @@
     "@angular/compiler": "^22.0.0",
     "@angular/core": "^22.0.0",
     "@angular/platform-browser": "^22.0.0",
-    "@saplingai/sapling-js": "^1.0.38",
+    "@saplingai/sapling-js": "^1.0.54",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

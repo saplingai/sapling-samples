@@ -23,4 +23,13 @@ export class App implements AfterViewInit {
       Sapling.observe(editor);
     }
   }
+
+  // Shows an overall score and highlights the sentences flagged as AI-generated
+  checkAI() {
+    const editor = document.getElementById('editor');
+    if (editor) {
+      // Cast because the package's type declarations don't list the options argument yet
+      (Sapling as any).checkOnce(editor, { aiDetect: true });
+    }
+  }
 }

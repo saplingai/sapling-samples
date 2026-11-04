@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<script src="https://sapling.ai/static/js/sapling-sdk-v1.1.3.min.js"></script>
+
+</head>
+<body>
+
+  <h1>Sapling AI Detection Demo</h1>
+
+  <div contenteditable="true" id="check-space" sapling-ignore="true">
+    Phone chargers are essential accessories that have become an integral part of modern life. These devices are designed to replenish the battery life of our smartphones and other electronic gadgets, enabling us to stay connected and productive throughout the day. With advancements in technology, phone chargers have evolved significantly, offering various types such as wired, wireless, fast-charging, and portable chargers. The convenience and versatility of phone chargers have revolutionized the way we use our devices, ensuring we can always stay powered up and connected in our fast-paced, digital world.
+  </div>
+
+  <button id="ai-detect-button">Check AI</button>
+
+</body>
+
+<script type="text/javascript">
+Sapling.init({
+  key: '<YOUR_API_KEY>',
+  endpointHostname: 'https://api.sapling.ai',
+  statusBadge: true,
+  mode: 'dev',
+});
+
+const contentEditable = document.getElementById('check-space');
+Sapling.observe(contentEditable);
+
+// Shows an overall score and highlights the sentences flagged as AI-generated
+document.getElementById('ai-detect-button').addEventListener('click', () => {
+  Sapling.checkOnce(contentEditable, { aiDetect: true });
+});
+</script>
+
+</html>

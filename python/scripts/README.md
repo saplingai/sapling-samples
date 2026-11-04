@@ -26,11 +26,15 @@ Set your API key in the `SAPLING_API_KEY` environment variable (or replace
 
 ```
 python3 get_edits.py           # Grammar and spelling edits
-python3 get_ai_detection.py    # AI-generated content detection, with chunking
+python3 get_ai_detection.py    # AI-generated content detection, with chunking for long text
 python3 analyze_text.py        # Rephrase, tone, sentiment and language detection
 ```
 
 `analyze_text.py` requires `sapling-py` version 4.1.0 or later.
+
+`get_ai_detection.py` prints a verdict and the sentences flagged as AI-generated for each chunk,
+followed by the overall score and the share of the text that reads as AI-generated. See the
+[AI Detector API reference](https://sapling.ai/docs/api/detector) for all of the fields and options.
 
 The result of `get_edits.py` should be an array of edits of this form:
 ```

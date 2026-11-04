@@ -4,7 +4,7 @@
 
 - Register for an account at https://sapling.ai and sign in.
 - Generate a development API key in your dashboard.
-- Replace `<YOUR_API_KEY>` in `get_edits.mjs` with Sapling API key.
+- Replace `<YOUR_API_KEY>` in `get_edits.mjs` and `get_ai_detection.mjs` with Sapling API key.
 - Install the sapling-js package: `npm i @saplingai/sapling-js`
 
 
@@ -30,6 +30,37 @@ The result should be an array of edits of this form:
   ]
 }
 ```
+
+
+## AI detection
+
+Run `node get_ai_detection.mjs`
+
+This prints the overall score, the share of the text that reads as AI-generated, a verdict of
+`human`, `mixed` or `ai`, and each sentence flagged as AI-generated. The API response has this form:
+
+```
+{
+  score: 0.97,
+  ai_fraction: 1,
+  verdict: 'ai',
+  segments: [ { start: 0, end: 90, score: 0.98 } ],
+  low_confidence: false,
+  low_confidence_reasons: [],
+  sentence_scores: [
+    {
+      sentence: 'Phone chargers are essential accessories that have become an integral part of modern life.',
+      score: 0.98,
+      start: 0,
+      end: 90
+    }
+  ],
+  text: '...',
+  version: '...'
+}
+```
+
+See the [AI Detector API reference](https://sapling.ai/docs/api/detector) for all of the fields and options.
 
 
 ## CommonJS

@@ -15,3 +15,5 @@ Sapling is declared in `package.json` and installed as a dependency through npm.
 ## Running
 
 Run `npm start` for a dev server. Navigate to [http://localhost:4200](http://localhost:4200).
+
+Click **Check AI** to run AI detection on the editor's text. You'll see an overall score, and the sentences flagged as AI-generated are highlighted.
